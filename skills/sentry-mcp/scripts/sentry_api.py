@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+"""
+sentry_api.py — Sentry API tool runner
+Config read from SENTRY_TOKEN, SENTRY_ORG, SENTRY_PROJECT environment variables.
+Base URL is hardcoded to https://de.sentry.io/api/0
+
+Usage:
+  python sentry_api.py <tool> [args...]
+
+Tools:
+  list_tools
+  discover
+  list_issues                [limit] [cursor]
+  get_issue_details          <issue_id>
+  resolve_issue              <issue_id>
+  ignore_issue               <issue_id>
+"""
 import os, sys, json, urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 

@@ -1,4 +1,24 @@
 #!/usr/bin/env python3
+"""
+figma_api.py — Figma API tool runner
+Token read from SPM_FIGMA_TOKEN environment variable.
+
+Usage:
+  python figma_api.py <tool> [args...]
+
+Tools:
+  list_tools
+  get_design_context      <file_key>
+  get_metadata            <file_key>
+  figma_read_nodes        <file_key> <node_ids_csv> [depth]
+  figma_extract_styles    <file_key> [types_csv]
+  figma_search_components <file_key> [query]
+  figma_export_images     <file_key> <node_ids_csv> [format] [scale]
+  create_design_system_rules <file_key> [text|css|markdown]
+  generate_figma_design   <file_key> <spec>
+  get_code_connect_map    <file_key> [component_id]
+  add_code_connect_map    <file_key> <component_id> <name> <code_path> [framework]
+"""
 
 import os, sys, json, urllib.request, urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
