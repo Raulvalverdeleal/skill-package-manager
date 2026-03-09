@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 figma_api.py — Figma API tool runner
-Token read from FIGMA_TOKEN environment variable.
+Token read from SPM_FIGMA_TOKEN environment variable.
 
 Usage:
   python figma_api.py <tool> [args...]
@@ -26,27 +26,32 @@ from pathlib import Path
 
 BASE = "https://api.figma.com/v1"
 
-# Load .env from the skill's own directory only
+# ── Env ───────────────────────────────────────────────────────────────────────
+
+ENV_VARS = ["SPM_FIGMA_TOKEN"]
+
 def _load_env():
     env_file = Path(__file__).parent.parent / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, _, v = line.partition("=")
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    if not env_file.exists():
+        return
+    declared = {}
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, _, v = line.partition("=")
+            declared[k.strip()] = v.strip().strip('"').strip("'")
+    for key in ENV_VARS:
+        if key in declared:
+            os.environ.setdefault(key, declared[key])
 
 _load_env()
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-BASE = "https://api.figma.com/v1"
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 
 def _token():
-    t = os.environ.get("FIGMA_TOKEN", "")
+    t = os.environ.get("SPM_FIGMA_TOKEN", "")
     if not t:
-        sys.exit("Error: FIGMA_TOKEN environment variable not set")
+        sys.exit("Error: SPM_FIGMA_TOKEN environment variable not set")
     return t
 
 def get(path):
@@ -85,7 +90,6 @@ def prune(node, depth):
         out["children"] = [prune(c, depth - 1) for c in children]
     elif children:
         out["childCount"] = len(children)
-        # omit children entirely to save tokens
     return out
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
@@ -393,7 +397,6 @@ def tool_generate_figma_design(file_key, spec):
         key=lambda x: -x[1]
     )[:5]
 
-    # infer layout
     s = spec.lower()
     if   "modal" in s or "dialog"  in s: layout = ("overlay", 480,    24)
     elif "card"  in s:                   layout = ("card",    360,    16)

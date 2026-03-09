@@ -1,153 +1,100 @@
 ---
 name: sentry-fix-issue
+description: Full workflow to fix a single Sentry issue: branch check, triage report, fix, review, and commit. Use when the user provides a Sentry issue ID and wants to resolve it end-to-end.
 dependencies: sentry-mcp systematic-debugging
-risk: unknown
-description: Fetch a specific Sentry issue by ID, analyze its root cause and impact, then fix it with human approval at every step.
 ---
 
-# sentry-fix
-
-<!-- ================================================================
-  WORKFLOW VARIABLES
-  If a variable is unset (?), the agent will ask the user and
-  update this file automatically before continuing.
-================================================================ -->
-
-```yaml
-# workflow.config
-fix_branch:      fix/sentry-<issue-id>
-has_payments:    ?   # true | false — does the app process payments? stripe, redsys...
-```
-
----
-
-## 0. Bootstrap (run once)
-
-Read the `workflow.config` block above. For each variable still set to `?`:
-
-1. Ask the user the corresponding question (table below).
-2. Edit this file and replace `?` with the answer.
-3. Never ask again on future runs.
-
-| Variable | Question |
-|---|---|
-| `has_payments` | Does this app process payments or have a checkout flow? (`true` / `false`) |
-
-Once all variables are set, proceed to step 1.
-
----
-
-## 1. Get the issue ID
-
-Ask the user:
-
-> **Which Sentry issue do you want to fix?** Paste the issue ID (e.g. `PROJECT-123`).
-
-Wait for the answer before continuing.
-
----
-
-## 2. Prepare the environment
-
-Check the current branch:
+## Step 1 — Branch check
 
 ```bash
 git branch --show-current
 ```
 
-If not on `{{fix_branch}}`, switch to it or create it:
+If the current branch is not `fix/sentry`, stop and tell the user:
+
+```
+⚠️  Switch to fix/sentry before continuing:
+    git checkout fix/sentry
+    # or
+    git checkout -b fix/sentry
+```
+
+Do not proceed until confirmed.
+
+---
+
+## Step 2 — Fetch issue
 
 ```bash
-git switch {{fix_branch}} 2>/dev/null || git switch -c {{fix_branch}}
+python scripts/sentry_api.py get_issue_details <issue_id>
 ```
 
 ---
 
-## 3. Fetch issue details
+## Step 3 — Triage report
+
+Present a concise report before proposing anything:
+
+```
+ISSUE   <shortId>  <title>
+──────────────────────────────────────────────
+Severity    <critical|high|medium|low>  (<count> events, <userCount> users)
+Crash site  <filename>:<lineNo>  <function>
+Root cause  <one sentence>
+Active      first <firstSeen>  →  last <lastSeen>
+Env         <environment>  release <release>
+```
+
+**Severity mapping:**
+- `critical` — >1000 events or >100 users or P0 priority
+- `high`     — >100 events or >10 users or P1
+- `medium`   — P2 or first seen <48h
+- `low`      — everything else
+
+Wait for user acknowledgement before proceeding.
+
+---
+
+## Step 4 — Fix
+
+Locate the crash site in the codebase. Read the function. Apply the minimal fix that addresses the root cause — not a catch wrapper.
+
+Follow `systematic-debugging` for root cause analysis if the origin is indirect.
+
+Show the diff to the user and wait for approval before writing any file.
+
+---
+
+## Step 5 — Review
+
+After applying:
+1. Search the codebase for the same pattern — fix all instances
+2. Run existing tests for the affected file if any
+3. Confirm no regressions
+
+---
+
+## Step 6 — Commit + resolve
 
 ```bash
-{{sentry_script}} get_issue_details <issue_id>
+git add <changed_files>
+git commit -m "fix(<scope>): <what was wrong and how it was fixed>
+
+Fixes <shortId> — <issue_title>
+Events: <count>  Users: <userCount>"
 ```
 
-Read `diagnostics.breadcrumbs` to reconstruct what the user was doing.
-Locate the exact file and line in the local repository using `diagnostics.exception`.
-
----
-
-## 4. Determine impact
-
-Score the issue across these dimensions:
-
-| Dimension | Question |
-|---|---|
-| **User-facing** | Does this produce a visible error or broken UI for the end user? |
-| **Flow-blocking** | Does it prevent the user from progressing through the app? |
-{{#if has_payments}}| **Payment-blocking** | Does it occur during checkout or payment processing? |{{/if}}
-| **Scope** | How many unique users are affected (`userCount`)? |
-
----
-
-## 5. Present the Diagnostic Report
-
-Show this to the user before touching any code:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SENTRY ISSUE — <ID>
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Title      : <title>
-  Scale      : <count> events / <userCount> users
-  Culprit    : <culprit>
-
-  What happened
-  <1–2 sentence reconstruction from breadcrumbs>
-
-  Root cause
-  <identified line / function / reason>
-
-  Impact
-  • User-facing       : yes / no
-  • Flow-blocking     : yes / no
-  • Payment-blocking  : yes / no   ← omit if has_payments is false
-  • Affected users    : <userCount>
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## 6. Wait for user decision
-
-> **What do you want to do?**
-> `fix` — apply the fix now
-> `archive` — ignore it permanently in Sentry
-
-- **`archive`** → run `{{sentry_script}} ignore_issue <issue_id>`. Done.
-- **`fix`** → continue to step 7.
-
----
-
-## 7. Apply the fix
-
-1. If `systematic-debugging` is set, run it now passing the stack trace and breadcrumbs from step 3 to verify the fix plan before writing any code.
-2. Modify the code to resolve the root cause identified in step 3.
-2. Run existing tests to verify nothing broke:
-   ```bash
-   npm test
-   ```
-3. Show a diff summary of every file changed.
-
-Wait for user approval:
-
-> **Changes look good?**
-> `approve` — commit and mark as resolved
-> `revise` — describe what to change, then repeat from step 7
-
-Once approved:
+Then resolve in Sentry — only after user confirms the fix is good:
 
 ```bash
-git add <changed files>
-git commit -m "fix: resolve sentry <issue_id> — <title>"
-{{sentry_script}} resolve_issue <issue_id>
+python scripts/sentry_api.py resolve_issue <issue_id>
 ```
 
-Done. If there are committed fixes, remind the user to open a PR from `{{fix_branch}}`.
+---
+
+## Hard rules
+
+- Never skip Step 1 — wrong branch = no work done
+- Never resolve without explicit user confirmation
+- Never wrap in try/catch as the sole fix
+- If root cause is unclear after reading the stack, ask — don't guess

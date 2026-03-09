@@ -2,8 +2,10 @@
 """
 spm - Skill Package Manager
 Usage:
+    spm install           Install all skills from skills.json
     spm install <skill>   Install a skill and its dependencies
-    spm i <skill>         Alias for install
+    spm i                 Alias for install
+    spm i <skill>         Alias for install <skill>
     spm remove <skill>    Remove a skill
     spm rm <skill>        Alias for remove
     spm sync              Pull latest skills from remote registry
@@ -102,6 +104,52 @@ def get_dependencies(skill_dir):
     return [d.strip() for d in raw.split() if d.strip()]
 
 
+# ── .env.example helpers ──────────────────────────────────────────────────────
+
+def parse_env_example(skill_dir):
+    """
+    Parse .env.example from a skill directory.
+    Returns a list of (key, comment) tuples, or an empty list if not found.
+    Comment is the inline comment after #, or empty string if none.
+    """
+    env_example = os.path.join(skill_dir, ".env.example")
+    if not os.path.isfile(env_example):
+        return []
+
+    entries = []
+    with open(env_example, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            # Skip blank lines and pure comment lines
+            if not stripped or stripped.startswith("#"):
+                continue
+            # Split key from inline comment
+            if "#" in stripped:
+                var_part, _, comment = stripped.partition("#")
+                key = var_part.strip().split("=")[0].strip()
+                comment = comment.strip()
+            else:
+                key = stripped.split("=")[0].strip()
+                comment = ""
+            if key:
+                entries.append((key, comment))
+
+    return entries
+
+
+def notify_env_vars(skill_name, env_vars, root):
+    """
+    Print a clear notice listing the env vars required by the skill.
+    Does NOT write anything to disk — the user handles their .env.
+    """
+    print(f"\n  ⚠️  '{skill_name}' requires environment variables.")
+    print(f"  Add the following to your project's .env:\n")
+    for key, comment in env_vars:
+        suffix = f"  # {comment}" if comment else ""
+        print(f"    {key}={suffix}")
+    print()
+
+
 # ── skills.json helpers ───────────────────────────────────────────────────────
 
 def load_spm_json():
@@ -157,19 +205,33 @@ def ensure_gitignore(skills_path, root):
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 
-def cmd_install(skill_name):
-    """Install a skill and its dependencies into the project."""
+def cmd_install(skill_name=None):
+    """Install a skill and its dependencies, or all skills from skills.json if no name given."""
     root = find_project_root()
     data, _ = load_spm_json()
-    if data is None:
-        data = init_spm_json(root)
-    skills_path = data.get("path", ".agents/skills")
 
     if root != os.path.abspath(os.getcwd()):
         print(f"📂 Project root: {root}")
 
-    _install_skill(skill_name, data, skills_path, required_by=None, root=root)
+    # No skill name — install all from skills.json (like npm install)
+    if skill_name is None:
+        if data is None or not data.get("skills"):
+            print(f"❌ No {SPM_JSON} found or it has no skills listed.")
+            print(f"   Run 'spm install <skill>' to add a skill first.")
+            return
+        skills_path = data.get("path", ".agents/skills")
+        names = list(data["skills"].keys())
+        print(f"📦 Installing {len(names)} skill(s) from {SPM_JSON}...\n")
+        for name in names:
+            _install_skill(name, data, skills_path, required_by=None, root=root)
+        ensure_gitignore(skills_path, root)
+        save_spm_json(data, root)
+        return
 
+    if data is None:
+        data = init_spm_json(root)
+    skills_path = data.get("path", ".agents/skills")
+    _install_skill(skill_name, data, skills_path, required_by=None, root=root)
     ensure_gitignore(skills_path, root)
     save_spm_json(data, root)
 
@@ -204,16 +266,27 @@ def _install_skill(skill_name, data, skills_path, required_by, root):
             # Already installed — make sure required_by is updated
             _add_required_by(data, dep, skill_name)
 
-    # Copy skill to project
+    # Copy skill to project, excluding .env.example
     dest = os.path.join(root, skills_path, skill_name)
     if os.path.exists(dest):
         shutil.rmtree(dest)
-    shutil.copytree(src, dest)
+    shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".env.example"))
+
+    # Notify about required env vars (after copy, before summary line)
+    env_vars = parse_env_example(src)
+    if env_vars:
+        notify_env_vars(skill_name, env_vars, root)
 
     # Update skills.json entry
     entry = data["skills"].get(skill_name, {})
     entry["enabled"] = True
     entry["dependencies"] = deps
+
+    # Track whether this skill requires env vars
+    if env_vars:
+        entry["env_vars"] = [key for key, _ in env_vars]
+    else:
+        entry.pop("env_vars", None)
 
     if required_by:
         rb = entry.get("required_by", [])
@@ -337,7 +410,8 @@ def cmd_list(global_flag):
             dep_str = f"  deps: {', '.join(deps)}" if deps else ""
             rb = info.get("required_by", [])
             rb_str = f"  required_by: {', '.join(rb)}" if rb else ""
-            print(f"  {status} {name}{dep_str}{rb_str}")
+            env_str = f"  env: {', '.join(info['env_vars'])}" if info.get("env_vars") else ""
+            print(f"  {status} {name}{dep_str}{rb_str}{env_str}")
 
 
 def cmd_search(query):
@@ -385,11 +459,21 @@ def cmd_info(skill_name):
     for key, value in fm.items():
         print(f"  {key:<15} {value}")
 
-    # List files in skill dir
+    # Show env vars if present
+    env_vars = parse_env_example(skill_dir)
+    if env_vars:
+        print(f"\n  {'env vars':<15}")
+        for key, comment in env_vars:
+            suffix = f"  # {comment}" if comment else ""
+            print(f"    {key}{suffix}")
+
+    # List files in skill dir (excluding .env.example — it's internal)
     files = []
     for root, dirs, filenames in os.walk(skill_dir):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for f in filenames:
+            if f == ".env.example":
+                continue
             rel = os.path.relpath(os.path.join(root, f), skill_dir)
             files.append(rel)
 
@@ -418,8 +502,9 @@ HELP = """
   Usage:  spm <command> [args]
 
   Commands:
+    install               Install all skills from skills.json
     install <skill>       Install a skill and its dependencies
-    i <skill>             Alias for install
+    i / i <skill>         Alias for install
     remove <skill>        Remove a skill from the project
     rm <skill>            Alias for remove
     sync                  Pull latest skills from remote registry
@@ -450,10 +535,7 @@ def main():
     command = args[0]
 
     if command in ("install", "i"):
-        if len(args) < 2:
-            print("Usage: spm install <skill>")
-            return
-        cmd_install(args[1])
+        cmd_install(args[1] if len(args) > 1 else None)
 
     elif command in ("remove", "rm"):
         if len(args) < 2:

@@ -1,453 +1,238 @@
 ---
 name: figma-implement-design
+description: Use this skill when the user wants to implement a Figma design into code.
 dependencies: figma-mcp frontend-developer
-description: Takes a Figma file and an optional PRD, and builds the full application — tokens, UI kit, pixel-faithful layout, mocked API layer, and clean build.
 ---
 
 # figma-implement-design
 
-## Config
-
-```yaml
-prd_file:        ?               # AGENTS.md | PRD.md | the project guidelines...
-file_key:        ?               # extracted from Figma URL: figma.com/file/FILE_KEY/...
-framework:       ?           # react | vue | svelte | vanilla
-language:        ?      # typescript | javascript
-styling:         ?        # css-modules | tailwind | styled-components | css
-components_dir:  ?
-pages_dir:       ?
-styles_dir:      ?
-public_dir:      ?
-mock_dir:        ?
-services_dir:    ?
-router:          ?
-package_manager: ?
-dev_command:     ?
-build_command:   ?
-```
-
-Any variable set to `?` → ask the user → update this block → continue.
+Full workflow to go from a Figma file to production-ready code.
+Uses `figma_api.py` (from the `figma-mcp` skill) as the only data source.
+Never guess values — every color, size, font, and asset must come from the file.
 
 ---
 
-## 0. Pre-flight
-
-Before touching any code:
+## Before you start
 
 ```bash
-# Confirm the project is initialized
-ls package.json || echo "MISSING — scaffold first"
-
-# Confirm Figma MCP is available
-# (figma_read_file should respond without error)
+python scripts/figma_api.py list_tools   # confirm the script is reachable
 ```
 
-If the project does not exist yet, scaffold it according to `framework` and `language` before proceeding.
-
-Confirm with the user:
-- Is there a PRD? If yes, where?
-- Are there multiple Figma pages? Which ones are in scope?
-- Any existing design system or component library to integrate with?
+If it fails, check that `SPM_FIGMA_TOKEN` is set in the project `.env`.
 
 ---
 
-## 1. Read the Figma file
+## Phase 1 — Orient
 
-```
-figma_read_file(file_key, depth=2)
-```
+**Goal:** understand the file structure before touching anything else.
 
-Get an overview: pages, top-level frames, overall structure.
-Then drill into each in-scope page:
-
-```
-figma_read_nodes(file_key, node_ids=[page_frame_ids], depth=3)
+```bash
+python scripts/figma_api.py get_design_context <file_key>
 ```
 
-> **Tip — node IDs:** Figma URLs use hyphens (`1-23`). The API requires colons (`1:23`). Always convert.  
-> **Tip — styles:** `figma_extract_styles` only returns tokens if the file uses named Figma Styles. If it returns empty, inspect `.fills` directly on nodes via `figma_read_nodes`.
+From the output, identify and note:
+- Which **pages** exist and which one contains the target design
+- Which **frames** are screens vs components vs documentation
+- How many **components** and **token types** are defined
+
+> **If the output is too large:** the file likely has many pages.
+> Call `figma_read_nodes` on the target page ID at `depth=1` instead,
+> to get only that page's direct children.
+
+**Deliverable:** a short list of frame IDs you need to implement, nothing more.
 
 ---
 
-## 2. Map Figma → PRD (skip if no PRD)
+## Phase 2 — Visual reference
 
-If `prd_file` exists, read it. Extract: features, user flows, data entities, external integrations.
+**Goal:** get a PNG of each target frame before writing any code.
 
-Build a correspondence table:
+```bash
+python scripts/figma_api.py figma_export_images <file_key> <frame_ids_csv> png 1
+```
 
-| Figma Screen | Frame ID | PRD Feature | Route | Notes |
-|---|---|---|---|---|
+Download each URL immediately — they expire in ~30 min.
+Keep these open as ground truth throughout the implementation.
+Do not proceed without a visual reference.
 
-Flag gaps:
-- ❌ PRD feature with no Figma screen → confirm with user: skip or design a stub?
-- ❌ Figma screen with no PRD feature → confirm: in scope or decorative?
-
-**Present this map to the user and wait for confirmation before continuing.**
-
-If there is no PRD, derive routes and features directly from Figma frame names.
+> **If there are many frames:** export them one at a time rather than all at once.
+> A single failed URL is easier to retry than a batch.
 
 ---
 
-## 3. Design tokens
+## Phase 3 — Design tokens
 
-```
-figma_extract_styles(file_key, types=["FILL", "TEXT", "EFFECT", "GRID"])
+**Goal:** extract all global values before writing a single line of CSS.
+
+```bash
+python scripts/figma_api.py figma_extract_styles <file_key>
 ```
 
-Generate `{{styles_dir}}/tokens.css`:
+Map the output into a tokens file (`tokens.css`, `tokens.ts`, or equivalent):
 
 ```css
+/* tokens.css */
 :root {
   /* Colors */
-  --color-<semantic-name>: #HEX;
+  --color-primary: #1D4ED8;
 
   /* Typography */
-  --font-family-<n>: 'Name', fallback;
-  --font-size-<n>: Xpx;
-  --font-weight-<n>: N;
-  --line-height-<n>: X;
-  --letter-spacing-<n>: Xem;
-
-  /* Spacing — 4px base grid */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
-  --space-16: 64px;
-
-  /* Radii */
-  --radius-<n>: Xpx;
-
-  /* Shadows */
-  --shadow-<n>: X;
-
-  /* Z-index scale */
-  --z-base: 0;
-  --z-overlay: 100;
-  --z-modal: 200;
-  --z-toast: 300;
+  --font-size-heading-1: 48px;
+  --font-weight-heading-1: 700;
+  --line-height-heading-1: 56px;
+  --font-family-body: 'Inter', sans-serif;
 }
 ```
 
-Rules:
-- **Never overwrite** if the file already exists — only append missing tokens.
-- If `figma_extract_styles` returns empty for a type, extract values directly from nodes and name them by role (e.g. `--color-primary`, `--color-surface`).
-- No hardcoded values anywhere in the codebase — CSS variables only.
+> **If `figma_extract_styles` returns empty or partial results:**
+> the file uses hardcoded values instead of Figma Styles.
+> Fall back to extracting values directly from nodes in Phase 4 —
+> inspect `.fills`, `.style`, `.strokeWeight` on individual nodes.
+> Never invent values.
+
+**Deliverable:** a committed tokens file. Do not proceed until it exists.
 
 ---
 
-## 4. Assets — download before continuing
+## Phase 4 — Component inventory
 
-Identify all exportable nodes:
-
-```
-figma_read_nodes(file_key, node_ids=[all_frame_ids], depth=2)
-```
-
-Collect: `VECTOR`, `BOOLEAN_OPERATION`, frames that are icons or illustrations.
-
-```
-figma_export_images(file_key, node_ids=[svg_ids],  format="svg")
-figma_export_images(file_key, node_ids=[raster_ids], format="png", scale=2)
-```
-
-> ⚠️ Export URLs expire in ~30 minutes. Download immediately.
+**Goal:** know every reusable piece before building anything.
 
 ```bash
-curl -o {{public_dir}}/icons/<name>.svg  "<url>"
-curl -o {{public_dir}}/images/<name>.png "<url>"
+python scripts/figma_api.py figma_search_components <file_key>
 ```
 
-Verify:
+For each component set (variants), note:
+- Component name and node ID
+- Variant properties (e.g. `size=sm|md|lg`, `state=default|hover|disabled`)
+
+Then inspect the ones you need to implement:
+
 ```bash
-ls {{public_dir}}/icons {{public_dir}}/images
+python scripts/figma_api.py figma_read_nodes <file_key> <component_ids_csv> 1
 ```
 
-**Do not continue to step 5 until this passes.**
+Start at `depth=1`. If a node shows `childCount > 0`, drill in:
+
+```bash
+python scripts/figma_api.py figma_read_nodes <file_key> <child_id> 2
+```
+
+> **Depth discipline — strictly follow this order:**
+> 1. `depth=1` — see direct children and layout props
+> 2. If needed, `depth=2` on a specific child
+> 3. Never request `depth=3+` on a large node — split into smaller calls instead
+>
+> **If a response is too large to process:**
+> — identify the `childCount` nodes that are relevant
+> — fetch each one individually at `depth=1`
+> — delegate complex components to a focused sub-call scoped to that component ID only
+
+**Deliverable:** a list mapping each Figma component to its code counterpart.
 
 ---
 
-## 5. Mock layer
+## Phase 5 — Asset extraction
 
-Everything external gets a mock. No real API calls, no real auth, no real payments.
+**Goal:** download every icon, illustration, and image before layout work.
 
-### 5a. Mock data
+From Phase 4 node inspection, identify:
+- Vector nodes (type `VECTOR`, `BOOLEAN_OPERATION`) → export as SVG
+- Image fills (type `RECTANGLE` with `imageRef`) → export as PNG @2x
 
-Create `{{mock_dir}}/data/<feature>.ts` with realistic, representative data. No Lorem ipsum.
+```bash
+# Vectors
+python scripts/figma_api.py figma_export_images <file_key> <vector_ids_csv> svg
 
-Rules:
-- At least 5–10 items for lists.
-- Include edge cases: long strings, empty states, error states.
-- Mirror the real API shape exactly (so swapping the mock for real calls later requires zero refactoring).
-
-### 5b. API service layer
-
-Create `{{services_dir}}/<feature>.service.ts`:
-
-```ts
-// All functions simulate network latency
-const delay = (ms = 300) => new Promise(r => setTimeout(r, ms))
-
-export async function getItems(): Promise<Item[]> {
-  await delay()
-  return mockItems
-}
-
-export async function createItem(payload: CreateItemInput): Promise<Item> {
-  await delay(500)
-  return { id: crypto.randomUUID(), ...payload, createdAt: new Date().toISOString() }
-}
+# Raster images
+python scripts/figma_api.py figma_export_images <file_key> <image_ids_csv> png 2
 ```
 
-All service functions must:
-- Return the correct TypeScript types.
-- Simulate realistic latency (`300–600ms`).
-- Support an optional error simulation flag for testing error states.
+Download all URLs immediately. Place assets in `assets/icons/` and `assets/images/`.
+Never use a placeholder if the real asset is available.
 
-### 5c. Auth mock
+> **If there are 20+ assets:** batch by type (all icons in one call, all images in another).
+> If a batch fails with `HTTP 429`, split it in half and retry each part separately.
 
-```ts
-// src/mocks/auth.mock.ts
-export const mockUser = {
-  id: '1',
-  name: 'Alex Johnson',
-  email: 'alex@example.com',
-  avatar: '/images/avatar.png',
-  role: 'admin',
-}
+---
 
-export function useAuth() {
-  return { user: mockUser, isAuthenticated: true, login: async () => {}, logout: async () => {} }
-}
+## Phase 6 — UI kit
+
+**Goal:** build every component in isolation before composing layouts.
+
+Order of implementation:
+1. **Primitives** — tokens already done; now build base elements (Button, Input, Badge, Icon)
+2. **Composites** — components made of primitives (Card, Modal, NavItem)
+3. **Sections** — full-width layout sections (Header, Hero, Footer)
+
+For each component:
+- Match the Figma node structure as closely as the target framework allows
+- Use token variables — never hardcode a color or size that exists in tokens
+- Implement all variants defined in the component set
+- Check against the visual reference from Phase 2
+
+> **If a component has many variants (10+):**
+> implement the default state first, ship it, then layer in variants.
+> Do not block layout work on exhaustive variant coverage.
+
+---
+
+## Phase 7 — Layout
+
+**Goal:** compose the full page using the components from Phase 6.
+
+```bash
+python scripts/figma_api.py figma_read_nodes <file_key> <screen_frame_id> 1
 ```
 
-Login flow: form visible, submit → redirect to dashboard, no credentials validated.
+Read the top-level layout of the target screen at `depth=1`.
+Map each direct child to a component or section from Phase 6.
 
-### 5d. Third-party integrations
+Then inspect each section individually:
 
-| Integration type | Mock approach |
+```bash
+python scripts/figma_api.py figma_read_nodes <file_key> <section_id> 2
+```
+
+Implement the layout using the exact values from the node:
+- `absoluteBoundingBox` → width, height, position
+- `paddingLeft/Right/Top/Bottom` → padding
+- `itemSpacing` → gap
+- `layoutMode` → `HORIZONTAL` = `flex-row`, `VERTICAL` = `flex-col`
+- `primaryAxisAlignItems` / `counterAxisAlignItems` → justify/align
+
+> **If the screen is very long (e.g. a landing page with 8+ sections):**
+> split into vertical slices. Implement and review one section at a time.
+> Never try to map the entire page in a single node fetch.
+
+---
+
+## Phase 8 — Review
+
+**Goal:** close the gap between the implementation and the Figma reference.
+
+Go through each screen with the Phase 2 PNG open side by side and check:
+
+| Area | What to verify |
 |---|---|
-| Payment (Stripe, etc.) | Form visible, submit → `console.log(payload)` + success state |
-| Maps | `<div>` sized correctly + placeholder |
-| Charts/analytics | Static data from mock, correct dimensions |
-| File upload | `<input type="file">` → stores in component state, no upload |
-| Email / SMS | Form submits → success toast, nothing sent |
-| OAuth | Button visible → redirect to `/dashboard` directly |
+| Spacing | Margins, padding, gaps match the node values |
+| Typography | Font family, size, weight, line-height, letter-spacing |
+| Color | Every fill, border, and shadow matches a token or extracted value |
+| Assets | No placeholders — every icon and image is the real asset |
+| Variants | Interactive states (hover, focus, disabled) are implemented |
+| Responsive | Layout holds at the breakpoints implied by the Figma frames |
 
-Standard placeholder component for non-implementable integrations:
-
-```tsx
-// src/components/IntegrationPlaceholder.tsx
-interface Props { name: string; height?: number }
-
-export function IntegrationPlaceholder({ name, height = 320 }: Props) {
-  return (
-    <div
-      style={{ background: 'var(--color-surface-secondary)', height,
-               display: 'flex', alignItems: 'center', justifyContent: 'center',
-               borderRadius: 'var(--radius-md)', border: '2px dashed var(--color-border)' }}
-      aria-label={`${name} — pending integration`}
-    >
-      <span style={{ color: 'var(--color-text-tertiary)', fontSize: 'var(--font-size-sm)' }}>
-        {name} — pending integration
-      </span>
-    </div>
-  )
-}
-```
+Fix any delta. Re-export a PNG of the implementation if possible and diff visually.
 
 ---
 
-## 6. UI Kit
+## Error reference
 
-```
-figma_search_components(file_key)
-```
-
-For each component, drill into it:
-
-```
-figma_read_nodes(file_key, node_ids=[component_id], depth=4)
-```
-
-Create `{{components_dir}}/<ComponentName>.tsx`:
-
-Requirements per component:
-- One prop per variant and state (`intent`, `size`, `isLoading`, `isDisabled`, `isSelected`…).
-- All variants via conditional classes — never duplicated JSX.
-- Interactive states: hover/focus via CSS; `isLoading` renders a spinner and blocks interaction; `isDisabled` uses `aria-disabled` and `pointer-events: none`.
-- CSS variables only — no hardcoded values.
-- If the node has a `description`, it takes precedence over visual interpretation.
-- Export named + default.
-
-Component checklist:
-- [ ] Atoms: Button, Input, Select, Checkbox, Radio, Toggle, Badge, Tag, Avatar, Icon, Spinner
-- [ ] Layout: Card, Modal, Drawer, Tooltip, Popover, Dropdown
-- [ ] Feedback: Toast/Snackbar, Alert, EmptyState, ErrorState, LoadingState, Skeleton
-- [ ] Navigation: Navbar, Sidebar, Breadcrumb, Tabs, Pagination
-
-Build only what exists in Figma — do not invent components.
-
----
-
-## 7. Routing and shell
-
-Set up all routes from the mapping table as stubs first, then fill them in step 8.
-
-```tsx
-// Protected routes grant access unconditionally in this phase
-function PrivateRoute({ children }: { children: ReactNode }) {
-  return <>{children}</>
-}
-```
-
-Route structure:
-- `/` → redirect to main entry point
-- `/*` → `<NotFound />` with a "Go back" link
-- All routes must be reachable without credentials.
-
----
-
-## 8. Screen layout
-
-Order: shell/global layout → happy path screens → secondary screens → empty/error/loading states.
-
-For each screen:
-
-```
-figma_read_nodes(file_key, node_ids=[frame_id], depth=3)
-```
-
-If a section has `childCount > 0` and needs more detail:
-```
-figma_read_nodes(file_key, node_ids=[section_id], depth=4)
-```
-
-**Apply Figma values literally:**
-
-| Property | Rule |
+| Error | What to do |
 |---|---|
-| `text` | Exact copy — never paraphrase or invent |
-| `borderRadius` | Exact value in px, via CSS variable |
-| `fill` | Exact hex, mapped to CSS variable |
-| `width` FIXED | `width: Npx` |
-| `width` FILL | `width: 100%` |
-| `width` HUG | `width: fit-content` |
-| `layoutMode` HORIZONTAL | `display: flex; flex-direction: row` |
-| `layoutMode` VERTICAL | `display: flex; flex-direction: column` |
-| `primaryAxisAlignItems` | `justify-content` |
-| `counterAxisAlignItems` | `align-items` |
-| `itemSpacing` | `gap` |
-| `padding` | `padding: top right bottom left` |
-
-Additional rules:
-- If `wSizing`/`hSizing` is absent, use box dimensions as a reference, not fixed values.
-- Node `description` overrides visual interpretation.
-- Responsive: if Figma has mobile/tablet variants, implement all breakpoints.
-- Animations: `{/* TODO: animate — <description> */}` with a static fallback; never block layout for animation.
-
-For each screen, implement all states visible in Figma:
-- ✅ Default / happy path
-- ⬜ Loading (use Skeleton components)
-- ❌ Error (use ErrorState component)
-- 📭 Empty (use EmptyState component)
-
----
-
-## 9. Forms
-
-Every form must:
-- Validate required fields client-side before submit.
-- Show inline error messages per field.
-- Disable the submit button while submitting (`isLoading` state).
-- Show success feedback (toast or inline) after submission.
-- Call the mock service, not a real endpoint.
-
-```tsx
-async function handleSubmit(data: FormData) {
-  setIsLoading(true)
-  try {
-    await mockService.submit(data)
-    showToast({ type: 'success', message: 'Saved successfully' })
-  } catch {
-    showToast({ type: 'error', message: 'Something went wrong. Try again.' })
-  } finally {
-    setIsLoading(false)
-  }
-}
-```
-
----
-
-## 10. Build and verify
-
-```bash
-{{package_manager}} install
-{{dev_command}}
-```
-
-Fix compilation errors in order. No `@ts-ignore` or `any` without an explanatory comment.
-
-Then run:
-```bash
-{{build_command}}
-```
-
-Production build must have zero errors.
-
-### Final checklist
-
-**Functional**
-- [ ] Zero console errors or warnings
-- [ ] All routes reachable; `/*` returns a 404 page
-- [ ] Full happy path navigable end to end without credentials
-- [ ] All forms validate required fields and show errors
-- [ ] All mocked actions return visible feedback (toast, state change, redirect)
-- [ ] Loading states visible during async operations
-- [ ] Empty states visible when lists have no data
-- [ ] Error states visible (simulate via error flag in mock)
-
-**Visual fidelity**
-- [ ] Typography matches Figma (family, weight, size, line-height)
-- [ ] Colors match Figma (no hardcoded values)
-- [ ] Spacing matches Figma (padding, gap, margin)
-- [ ] Border radii match Figma
-- [ ] Icons and images loaded and sized correctly
-- [ ] Responsive: layout holds at 375px (mobile), 768px (tablet), 1280px (desktop)
-
-**Accessibility**
-- [ ] All `<img>` have meaningful `alt` text
-- [ ] Placeholders have `aria-label`
-- [ ] App is fully keyboard-navigable (Tab, Enter, Escape, Arrow keys where applicable)
-- [ ] Focus ring visible on all interactive elements
-- [ ] Color contrast meets WCAG AA minimum
-
----
-
-## 11. HANDOFF.md
-
-Generate at project root:
-
-```md
-# Handoff
-
-## Implemented screens
-- [x] Screen name — route `/path`
-
-## Mocks pending real integration
-| File | What's mocked | Integration needed |
-|---|---|---|
-| src/services/payments.service.ts | Stripe checkout | Stripe SDK + backend endpoint |
-
-## Out-of-scope features
-- Feature X: no Figma design provided, excluded by agreement with user.
-
-## Animation TODOs
-- `src/pages/Home.tsx:42` — hero entrance animation (fade + slide up)
-
-## Known gaps
-- Any divergence between PRD and what was built, with reason.
-```
+| `HTTP 403` | `SPM_FIGMA_TOKEN` is wrong or expired — regenerate in Figma account settings |
+| `HTTP 429` | Rate limited — wait 10–15 seconds, then retry; reduce batch size |
+| `no styles defined` | Use node-level value extraction in Phase 4 instead |
+| Node ID not found | You passed a hyphenated ID (`1-2`) — convert to colon (`1:2`) |
+| Response too large | Drop depth by 1 and re-fetch; split into smaller node ID batches |
+| Export URL expired | Re-run `figma_export_images` and download within 30 min |

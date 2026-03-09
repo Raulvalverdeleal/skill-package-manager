@@ -51,15 +51,26 @@ This copies the skill into `.agents/skills/` at your project root, creates a `sk
 
 `spm` detects the project root automatically — you can run it from any subdirectory and it will always install to the right place.
 
+#### Environment variables
+
+Some skills require API tokens or other secrets. When a skill includes a `.env.example`, `spm` will print the required variables during install:
+
+```
+⚠️  'figma-mcp' requires environment variables.
+Add the following to your project's .env:
+
+    SPM_FIGMA_TOKEN=   # your Figma personal access token
+```
+
+The `.env.example` is never copied into your project — only the notice is shown. Add the variables to your `.env` manually before using the skill. All skill-owned variables are prefixed with `SPM_` to avoid conflicts.
+
 ### 4. Share with your team
 
 Commit `skills.json` to your repo. Your teammates run:
 
 ```bash
-spm install   # coming soon — installs everything listed in skills.json
+spm install   # installs all skills listed in skills.json — like npm install
 ```
-
-Until then, they can see what skills the project uses with `spm list` and install them individually.
 
 ### 5. Keep the registry up to date
 
@@ -70,15 +81,16 @@ spm sync    # runs git pull in ~/.spm
 ### All commands
 
 ```
-spm install <skill>     Install a skill and its dependencies
-spm i <skill>           Alias for install
-spm remove <skill>      Remove a skill from the project
-spm rm <skill>          Alias for remove
-spm sync                Pull latest skills from remote registry
-spm list                List skills installed in current project
-spm list --global       List all available skills in ~/.spm
-spm search <query>      Search skills by name or description
-spm info <skill>        Show skill details
+spm install               Install all skills from skills.json
+spm install <skill>       Install a skill and its dependencies
+spm i / spm i <skill>     Alias for install
+spm remove <skill>        Remove a skill from the project
+spm rm <skill>            Alias for remove
+spm sync                  Pull latest skills from remote registry
+spm list                  List skills installed in current project
+spm list --global         List all available skills in ~/.spm
+spm search <query>        Search skills by name or description
+spm info <skill>          Show skill details
 ```
 
 ---
@@ -106,12 +118,37 @@ Run `spm list --global` to see everything available after cloning.
 
 When the agent receives a task, the `AGENTS.md` instructs it to:
 
-1. Run `ls .agents/skills/` to see what's available
-2. `grep` for skills relevant to the task
-3. Read the matching `SKILL.md` files before writing any code
-4. Proceed with its own judgment if no relevant skill is found
+1. Read `skills.json` for a quick index of installed skills and their metadata
+2. Run `ls .agents/skills/` to confirm what's available
+3. `grep` for skills relevant to the task
+4. Read the matching `SKILL.md` files before writing any code
+5. Proceed with its own judgment if no relevant skill is found
 
 Skills are intentionally project-local — you only include what your project needs, and the folder can safely live in `.gitignore`.
+
+### skills.json
+
+`skills.json` is the source of truth for what's installed. Beyond tracking skill names and dependencies, it supports a `notes` field per skill — a place for the agent to accumulate project-specific context across sessions:
+
+```json
+{
+  "path": ".agents/skills",
+  "skills": {
+    "figma-mcp": {
+      "enabled": true,
+      "dependencies": [],
+      "env_vars": ["SPM_FIGMA_TOKEN"],
+      "notes": [
+        "main design system file key: aBcDeFgH",
+        "user prefers SVGs inlined, not saved to assets/",
+        "export URLs expire fast — run export and wget in the same command"
+      ]
+    }
+  }
+}
+```
+
+Notes are written by the agent when it discovers something worth remembering: stack details, errors it has solved, user preferences, project-specific gotchas. They are read at the start of every session to avoid repeating reasoning.
 
 ---
 
@@ -124,7 +161,8 @@ skill-package-manager/
 │   └── check.py      ← validates skill frontmatter
 ├── skills/           ← all available skills
 │   ├── figma-mcp/
-│   │   └── SKILL.md
+│   │   ├── SKILL.md
+│   │   └── .env.example   ← optional: declares required env vars
 │   ├── frontend-design/
 │   │   └── SKILL.md
 │   └── ...
@@ -143,6 +181,7 @@ skill-package-manager/
 skills/
 └── your-skill-name/
     ├── SKILL.md          ← required
+    ├── .env.example      ← required if the skill needs env vars
     ├── references/       ← optional: extra docs the agent may need
     └── scripts/          ← optional: helper scripts referenced from SKILL.md
 ```
@@ -161,6 +200,19 @@ dependencies: other-skill another-skill   # space-separated, omit if none
 
 `name` and `description` are required. `dependencies` is optional but must be accurate — `spm` uses it to resolve installs.
 
+### Environment variables
+
+If your skill needs secrets or config, include a `.env.example` at the skill root:
+
+```bash
+SPM_YOUR_TOKEN=    # description of what this is and where to get it
+SPM_YOUR_ORG=      # e.g. your organization slug
+```
+
+- All variable names must be prefixed with `SPM_`
+- The `.env.example` is never copied into the user's project — `spm` reads it only to display the setup notice
+- The skill's script must load only the variables declared in its own `ENV_VARS` list, never the full `.env`
+
 ### Writing a good `SKILL.md`
 
 - **Be prescriptive.** Tell the agent exactly what to do, not just what the skill is about.
@@ -173,5 +225,6 @@ dependencies: other-skill another-skill   # space-separated, omit if none
 - [ ] Folder is inside `skills/` and the name matches `name` in frontmatter
 - [ ] `name` and `description` are present in frontmatter
 - [ ] `dependencies` lists any skills this one relies on
+- [ ] If the skill needs env vars: `.env.example` exists with `SPM_`-prefixed names
 - [ ] `SKILL.md` gives the agent enough context to act without guessing
 - [ ] No unrelated files included

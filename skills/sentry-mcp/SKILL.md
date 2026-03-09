@@ -1,6 +1,7 @@
 ---
 name: sentry-mcp
 description: Interact with the Sentry API to list, inspect, resolve, and archive production issues.
+depencencies: 
 ---
 
 # SKILL — sentry
@@ -10,17 +11,6 @@ description: Interact with the Sentry API to list, inspect, resolve, and archive
 python scripts/sentry_api.py <command> [args]
 python scripts/sentry_api.py list_tools
 ```
-
-Token and config read from `.env` in the skill directory:
-```
-SENTRY_TOKEN=...    # Settings → Auth Tokens
-SENTRY_ORG=...      # organization slug e.g. my-company
-SENTRY_PROJECT=...  # project slug e.g. backend-api
-```
-Base URL is hardcoded to `https://de.sentry.io/api/0`. If you don't know org/project, run `discover` first.
-
----
-
 ## Commands
 
 ### `discover`
@@ -44,22 +34,6 @@ Marks issue as resolved. Call after fix is committed and verified.
 ### `ignore_issue <issue_id>`
 Archives issue permanently — hidden from unresolved list.  
 ⚠️ Always confirm with the user before running this.
-
----
-
-## Decision guide
-
-```
-list_issues
-  ├── culprit is third-party?  →  ask user → ignore_issue
-  └── culprit is our code?
-        └── get_issue_details → analyze → present report
-              ├── fix  →  apply → test → commit → resolve_issue
-              ├── skip →  next issue
-              └── archive → ignore_issue
-```
-
----
 
 ## Errors
 

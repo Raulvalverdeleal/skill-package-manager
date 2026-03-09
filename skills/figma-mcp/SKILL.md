@@ -9,7 +9,6 @@ description: CLI tool for reading Figma files, extracting design tokens, inspect
 python scripts/figma_api.py list_tools
 python scripts/figma_api.py <tool> [args...]
 ```
-Token read from `FIGMA_TOKEN` in the skill's `.env` — never pass it as an argument.  
 File key is the string in the Figma URL: `figma.com/file/<FILE_KEY>/...`  
 Node IDs from URLs use hyphens (`1-2`) — convert to colons (`1:2`) when passing to the script.
 
@@ -63,19 +62,6 @@ Get colors, typography, and component inventory before writing any CSS or compon
 2. Identify the specific child node IDs you need
 3. Fetch each section separately with `figma_read_nodes` at `depth=1`
 4. Drill into `childCount > 0` nodes individually
-
----
-
-## Validation checklist
-
-Before marking implementation complete:
-- [ ] Layout matches (spacing, alignment, sizing)
-- [ ] Typography matches (font, size, weight, line height)
-- [ ] Colors match exactly
-- [ ] `text` content matches the Figma copy word for word
-- [ ] `border-radius` values match exactly
-- [ ] Assets render correctly (no placeholders)
-- [ ] Interactive states work (hover, focus, disabled)
 
 ---
 

@@ -1,33 +1,24 @@
 #!/usr/bin/env python3
-"""
-sentry_api.py — Sentry API tool runner
-Config read from SENTRY_TOKEN, SENTRY_ORG, SENTRY_PROJECT environment variables.
-Base URL is hardcoded to https://de.sentry.io/api/0
-
-Usage:
-  python sentry_api.py <tool> [args...]
-
-Tools:
-  list_tools
-  discover
-  list_issues                [limit] [cursor]
-  get_issue_details          <issue_id>
-  resolve_issue              <issue_id>
-  ignore_issue               <issue_id>
-"""
-
 import os, sys, json, urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 
-# Load .env from the skill's own directory only
+# ── Env ───────────────────────────────────────────────────────────────────────
+
+ENV_VARS = ["SPM_SENTRY_TOKEN", "SPM_SENTRY_ORG", "SPM_SENTRY_PROJECT"]
+
 def _load_env():
     env_file = Path(__file__).parent.parent / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, _, v = line.partition("=")
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    if not env_file.exists():
+        return
+    declared = {}
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, _, v = line.partition("=")
+            declared[k.strip()] = v.strip().strip('"').strip("'")
+    for key in ENV_VARS:
+        if key in declared:
+            os.environ.setdefault(key, declared[key])
 
 _load_env()
 
@@ -36,10 +27,14 @@ _load_env()
 BASE_URL = "https://de.sentry.io/api/0"
 
 def _cfg():
-    token   = os.environ.get("SENTRY_TOKEN", "")
-    org     = os.environ.get("SENTRY_ORG", "")
-    project = os.environ.get("SENTRY_PROJECT", "")
-    missing = [k for k, v in [("SENTRY_TOKEN", token), ("SENTRY_ORG", org), ("SENTRY_PROJECT", project)] if not v]
+    token   = os.environ.get("SPM_SENTRY_TOKEN", "")
+    org     = os.environ.get("SPM_SENTRY_ORG", "")
+    project = os.environ.get("SPM_SENTRY_PROJECT", "")
+    missing = [k for k, v in [
+        ("SPM_SENTRY_TOKEN", token),
+        ("SPM_SENTRY_ORG", org),
+        ("SPM_SENTRY_PROJECT", project),
+    ] if not v]
     if missing:
         sys.exit(f"Error: missing environment variables: {', '.join(missing)}")
     return token, org, project, BASE_URL
