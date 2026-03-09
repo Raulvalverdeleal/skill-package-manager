@@ -8,8 +8,8 @@ depencencies:
 
 ## Usage
 ```bash
-python scripts/sentry_api.py <command> [args]
-python scripts/sentry_api.py list_tools
+python .agents/skills/sentry-mcp/scripts/sentry_api.py <command> [args]
+python .agents/skills/sentry-mcp/scripts/sentry_api.py list_tools
 ```
 ## Commands
 

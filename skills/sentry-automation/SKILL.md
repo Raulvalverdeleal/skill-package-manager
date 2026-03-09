@@ -19,7 +19,7 @@ Must be on `fix/sentry` branch  before anything else.
 ## Step 2 — Fetch issues
 
 ```bash
-python scripts/sentry_api.py list_issues <n>   # default 5
+python .agents/skills/sentry-mcp/scripts/sentry_api.py list_issues <n>   # default 5
 ```
 Present the ranked list before doing anything:
 
@@ -67,7 +67,7 @@ After showing the report, ask the user to choose:
 
 **Archive** →
 ```bash
-python scripts/sentry_api.py ignore_issue <issue_id>
+python .agents/skills/sentry-mcp/scripts/sentry_api.py ignore_issue <issue_id>
 ```
 Confirm with user first, then continue.
 

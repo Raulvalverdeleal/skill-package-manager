@@ -6,8 +6,8 @@ description: CLI tool for reading Figma files, extracting design tokens, inspect
 
 ## Usage
 ```bash
-python scripts/figma_api.py list_tools
-python scripts/figma_api.py <tool> [args...]
+python .agents/skills/figma-mcp/scripts/figma_api.py list_tools
+python .agents/skills/figma-mcp/scripts/figma_api.py <tool> [args...]
 ```
 File key is the string in the Figma URL: `figma.com/file/<FILE_KEY>/...`  
 Node IDs from URLs use hyphens (`1-2`) — convert to colons (`1:2`) when passing to the script.
@@ -20,37 +20,37 @@ Node IDs from URLs use hyphens (`1-2`) — convert to colons (`1:2`) when passin
 
 ### 1. Orient
 ```bash
-python scripts/figma_api.py get_design_context <file_key>
+python .agents/skills/figma-mcp/scripts/figma_api.py get_design_context <file_key>
 ```
 Always start here. Returns pages, all top-level frames with IDs, component count, and token types.  
 Identify which frames are relevant before fetching anything else.
 
 ### 2. Inspect frames
 ```bash
-python scripts/figma_api.py figma_read_nodes <file_key> <node_ids_csv> [depth]
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_read_nodes <file_key> <node_ids_csv> [depth]
 ```
 Start with `depth=1` to see direct children. If a node shows `children: N (use depth↑ to expand)`, call again with that node ID at `depth=2`.  
 Never fetch the full tree at once — drill down only into what you need.
 
 ### 3. Get a visual reference
 ```bash
-python scripts/figma_api.py figma_export_images <file_key> <node_ids_csv> png 1
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_export_images <file_key> <node_ids_csv> png 1
 ```
 Export frames as PNG for visual reference. URLs expire in ~30 min — download immediately.  
 Use as source of truth when validating the final implementation.
 
 ### 4. Download assets
 ```bash
-python scripts/figma_api.py figma_export_images <file_key> <svg_ids_csv> svg
-python scripts/figma_api.py figma_export_images <file_key> <img_ids_csv> png 2
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_export_images <file_key> <svg_ids_csv> svg
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_export_images <file_key> <img_ids_csv> png 2
 ```
 Identify vectors and image nodes from step 2, then export and download before implementing.  
 Do not use placeholder assets if the real ones are available.
 
 ### 5. Extract tokens
 ```bash
-python scripts/figma_api.py figma_extract_styles <file_key>
-python scripts/figma_api.py figma_search_components <file_key>
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_extract_styles <file_key>
+python .agents/skills/figma-mcp/scripts/figma_api.py figma_search_components <file_key>
 ```
 Get colors, typography, and component inventory before writing any CSS or components.
 

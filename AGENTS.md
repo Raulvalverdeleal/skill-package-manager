@@ -60,3 +60,4 @@ Notes are append-only — never delete an existing note, only add.
 - Prefer the more specific skill over a generic one when both apply.
 - Reading an extra SKILL.md costs little; missing a relevant one can cost a lot.
 - If a skill lists `env_vars` in `skills.json`, verify those variables are set in `.env` before running any script from that skill.
+- If you found a path 

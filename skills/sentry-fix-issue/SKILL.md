@@ -26,7 +26,7 @@ Do not proceed until confirmed.
 ## Step 2 — Fetch issue
 
 ```bash
-python scripts/sentry_api.py get_issue_details <issue_id>
+python .agents/skills/sentry-mcp/scripts/sentry_api.py get_issue_details <issue_id>
 ```
 
 ---
@@ -87,7 +87,7 @@ Events: <count>  Users: <userCount>"
 Then resolve in Sentry — only after user confirms the fix is good:
 
 ```bash
-python scripts/sentry_api.py resolve_issue <issue_id>
+python .agents/skills/sentry-mcp/scripts/sentry_api.py resolve_issue <issue_id>
 ```
 
 ---
