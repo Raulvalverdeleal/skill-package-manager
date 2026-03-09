@@ -5,40 +5,52 @@ description: Auto generate test for your changes by identifying the changed code
 
 # Testing Workflow
 
-<!-- ================================================================
-  WORKFLOW VARIABLES
-  Before running, ensure all variables below are configured.
-  If a variable is unset (?), the agent will ask the user and
-  update this file automatically before continuing.
-================================================================ -->
-
-```yaml
-# workflow.config
-test_folder: ?                  # e.g. test/ or __tests__ or src/**/*.test.ts
-file_naming: ?                  # camelCase | kebab-case | snake_case
-mock_database: ?                # true | false
-mock_policy: ?                  # description of what to mock and why
-```
-
----
-
 ## 0. Bootstrap (run once)
 
-Before doing anything else, read the `workflow.config` block above.
+Read the project config from `skills.json`:
 
-For each variable still set to `?`:
-1. Ask the user the corresponding question (see table below).
-2. Once answered, **edit this file** and replace `?` with the user's answer.
-3. Continue — do not ask again in future runs.
+```bash
+cat skills.json
+```
 
-| Variable | Question to ask the user |
+Look for the `node-generate-test` entry and read its `notes` field:
+
+```json
+"node-generate-test": {
+  "notes": {
+    "test_folder": "...",
+    "file_naming": "...",
+    "mock_database": "...",
+    "mock_policy": "..."
+  }
+}
+```
+
+For each variable missing or not yet set, ask the user:
+
+| Variable | Question |
 |---|---|
 | `test_folder` | Where are your test files located? (e.g. `test/`, `__tests__/`, `src/**/*.spec.ts`) |
 | `file_naming` | What naming convention do test files use? (`camelCase`, `kebab-case`, `snake_case`) |
-| `mock_database` | Should the database be mocked, or is a real test DB available? (`true` = mock it / `false` = use real DB) |
+| `mock_database` | Should the database be mocked? (`true` = mock / `false` = use real DB) |
 | `mock_policy` | Besides the database, what else should be mocked? (e.g. "only external APIs and third-party services") |
 
-Once all variables are set, proceed from step 1.
+Once answered, write the values into `skills.json` under `node-generate-test.notes`:
+
+```json
+"node-generate-test": {
+  "enabled": true,
+  "dependencies": [],
+  "notes": {
+    "test_folder": "test/",
+    "file_naming": "kebab-case",
+    "mock_database": "true",
+    "mock_policy": "only external APIs and third-party services"
+  }
+}
+```
+
+Do not ask again in future runs — the values are already in `skills.json`.
 
 ---
 
@@ -86,12 +98,12 @@ For each changed file, trace:
 
 ## 3. Locate existing tests
 
-Search in `{{test_folder}}`:
+Search in `test_folder`:
 
 ```bash
-grep -r "functionName\|keyword" {{test_folder}}
-grep -r "routePath" {{test_folder}}
-grep -r "describe\|it(" {{test_folder}} | grep "keyword"
+grep -r "functionName\|keyword" <test_folder>
+grep -r "routePath" <test_folder>
+grep -r "describe\|it(" <test_folder> | grep "keyword"
 ```
 
 Map each changed unit to its test file. If a test file exists, read it fully before writing anything new.
@@ -112,16 +124,16 @@ Skip if the change is purely cosmetic (formatting, renaming with no logic change
 
 ## 5. Create the test
 
-Before writing anything, read `{{test_folder}}` to understand the conventions — syntax, structure, helpers, setup/teardown, and assertion style. Match them exactly.
+Before writing anything, read `test_folder` to understand the conventions — syntax, structure, helpers, setup/teardown, and assertion style. Match them exactly.
 
-**File naming:** `{{file_naming}}`
+File naming: use the `file_naming` convention from `skills.json`.
 
 **File creation policy:**
 If a test file for the same topic already exists, append the new test at the end of that file. Do not create a new file.
 
 **Mocking policy:**
-- Database: `mock_database: {{mock_database}}`
-- Everything else: `{{mock_policy}}`
+- Database: use `mock_database` value from `skills.json`
+- Everything else: follow `mock_policy` from `skills.json`
 
 **Coverage rules by test type:**
 
@@ -134,8 +146,8 @@ If a test file for the same topic already exists, append the new test at the end
 ## 6. Run the test
 
 ```bash
-npm test                         # all tests
-node {{test_folder}}/my-test.js  # single file
+npm test
+node <test_folder>/my-test.js   # single file
 ```
 
 ---
