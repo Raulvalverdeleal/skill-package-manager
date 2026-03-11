@@ -1,7 +1,7 @@
 ---
 name: figma-implement-design
 description: Use this skill when the user wants to implement a Figma design into code.
-dependencies: figma-mcp frontend-developer
+dependencies: frontend-developer
 ---
 
 # figma-implement-design
@@ -10,25 +10,9 @@ Full workflow to go from a Figma file to production-ready code, at least the lay
 Uses `figma_api.py` (from the `figma-mcp` skill) as the only data source.
 Never guess values — every color, size, font, and asset must come from the file.
 
----
-
-## Before you start
-
-```bash
-python3 scripts/figma_api.py list_tools   # confirm the script is reachable
-```
-
-If it fails, check that `SPM_FIGMA_TOKEN` is set in the project `.env`.
-
----
-
 ## Phase 1 — Orient
 
 **Goal:** understand the file structure before touching anything else.
-
-```bash
-python3 scripts/figma_api.py get_design_context <file_key>
-```
 
 From the output, identify and note:
 - Which **pages** exist and which one contains the target design
@@ -47,10 +31,6 @@ From the output, identify and note:
 
 **Goal:** get a PNG of each target frame before writing any code.
 
-```bash
-python3 scripts/figma_api.py figma_export_images <file_key> <frame_ids_csv> png 1
-```
-
 Download each URL immediately — they expire in ~30 min.
 Keep these open as ground truth throughout the implementation.
 Do not proceed without a visual reference.
@@ -63,10 +43,6 @@ Do not proceed without a visual reference.
 ## Phase 3 — Design tokens
 
 **Goal:** extract all global values before writing a single line of CSS.
-
-```bash
-python3 scripts/figma_api.py figma_extract_styles <file_key>
-```
 
 Map the output into a tokens file (`tokens.css`, `tokens.ts`, or equivalent):
 
@@ -98,25 +74,13 @@ Map the output into a tokens file (`tokens.css`, `tokens.ts`, or equivalent):
 
 **Goal:** know every reusable piece before building anything.
 
-```bash
-python3 scripts/figma_api.py figma_search_components <file_key>
-```
-
 For each component set (variants), note:
 - Component name and node ID
 - Variant properties (e.g. `size=sm|md|lg`, `state=default|hover|disabled`)
 
 Then inspect the ones you need to implement:
 
-```bash
-python3 scripts/figma_api.py figma_read_nodes <file_key> <component_ids_csv> 1
-```
-
 Start at `depth=1`. If a node shows `childCount > 0`, drill in:
-
-```bash
-python3 scripts/figma_api.py figma_read_nodes <file_key> <child_id> 2
-```
 
 > **Depth discipline — strictly follow this order:**
 > 1. `depth=1` — see direct children and layout props
@@ -140,15 +104,7 @@ From Phase 4 node inspection, identify:
 - Vector nodes (type `VECTOR`, `BOOLEAN_OPERATION`) → export as SVG
 - Image fills (type `RECTANGLE` with `imageRef`) → export as PNG @2x
 
-```bash
-# Vectors
-python3 scripts/figma_api.py figma_export_images <file_key> <vector_ids_csv> svg
-
-# Raster images
-python3 scripts/figma_api.py figma_export_images <file_key> <image_ids_csv> png 2
-```
-
-Download all URLs immediately. Place assets in `assets/icons/` and `assets/images/`.
+Download all URLs immediately. Place assets in `public/icons/` and `public/images/`.
 Never use a placeholder if the real asset is available.
 
 > **If there are 20+ assets:** batch by type (all icons in one call, all images in another).
@@ -181,18 +137,10 @@ For each component:
 
 **Goal:** compose the full page using the components from Phase 6.
 
-```bash
-python3 scripts/figma_api.py figma_read_nodes <file_key> <screen_frame_id> 1
-```
-
 Read the top-level layout of the target screen at `depth=1`.
 Map each direct child to a component or section from Phase 6.
 
-Then inspect each section individually:
-
-```bash
-python3 scripts/figma_api.py figma_read_nodes <file_key> <section_id> 2
-```
+Then inspect each section individually
 
 Implement the layout using the exact values from the node:
 - `absoluteBoundingBox` → width, height, position
