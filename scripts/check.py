@@ -1,45 +1,38 @@
 #!/usr/bin/env python3
 """
-Busca archivos SKILL.md en un directorio que NO tengan
-las propiedades requeridas en el frontmatter YAML.
+check.py — Validate frontmatter in SKILL.md files.
 
-Uso:
-    python3 check_skills.py [directorio] [--props prop1 prop2 ...]
+Usage:
+    python3 check.py [directory] [--props prop1 prop2 ...]
 
-Ejemplos:
-    python3 check_skills.py /mnt/skills
-    python3 check_skills.py /mnt/skills --props name description dependencies
-    python3 check_skills.py . --props name description
+Examples:
+    python3 check.py ~/.spm/skills
+    python3 check.py ~/.spm/skills --props name description keywords
 """
 
 import os
 import sys
 import argparse
 
-# Propiedades requeridas por defecto
 DEFAULT_REQUIRED = ["name", "description"]
 
 
 def parse_frontmatter(filepath):
-    """Extrae las propiedades del frontmatter YAML de un archivo Markdown."""
+    """Extract frontmatter keys from a SKILL.md file."""
     props = {}
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except (OSError, UnicodeDecodeError) as e:
-        return None, f"No se pudo leer: {e}"
+        return None, f"could not read: {e}"
 
     if not lines or lines[0].strip() != "---":
-        return props, "Sin frontmatter (no empieza con ---)"
+        return props, "no frontmatter (does not start with ---)"
 
-    in_frontmatter = False
     for line in lines[1:]:
         stripped = line.strip()
         if stripped == "---":
-            if not in_frontmatter:
-                in_frontmatter = True
-                break  # Fin del bloque frontmatter
-        # Parseo simple clave: valor (no soporta YAML anidado)
+            break
         if ":" in stripped:
             key = stripped.split(":", 1)[0].strip()
             if key:
@@ -49,80 +42,89 @@ def parse_frontmatter(filepath):
 
 
 def find_skill_files(root_dir):
-    """Encuentra todos los archivos SKILL.md recursivamente."""
+    """Find SKILL.md files in top-level skill directories only (matches build_index behaviour)."""
     skill_files = []
-    for dirpath, _, filenames in os.walk(root_dir):
-        for filename in filenames:
-            if filename.upper() == "SKILL.MD":
-                skill_files.append(os.path.join(dirpath, filename))
-    return sorted(skill_files)
+    try:
+        entries = sorted(os.listdir(root_dir))
+    except OSError:
+        return []
+    for entry in entries:
+        if entry.startswith("."):
+            continue
+        skill_dir = os.path.join(root_dir, entry)
+        if not os.path.isdir(skill_dir):
+            continue
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if os.path.isfile(skill_md):
+            skill_files.append(skill_md)
+    return skill_files
 
 
 def check_skills(root_dir, required_props):
-    """Busca skills con propiedades faltantes y devuelve los resultados."""
     skill_files = find_skill_files(root_dir)
 
     if not skill_files:
-        print(f"⚠️  No se encontraron archivos SKILL.md en: {root_dir}")
-        return
+        print(f"! no SKILL.md files found in: {root_dir}")
+        return 1
 
-    print(f"📂 Directorio: {os.path.abspath(root_dir)}")
-    print(f"🔍 Propiedades requeridas: {', '.join(required_props)}")
-    print(f"📄 Archivos SKILL.md encontrados: {len(skill_files)}")
+    print(f"  dir      {os.path.abspath(root_dir)}")
+    print(f"  props    {', '.join(required_props)}")
+    print(f"  found    {len(skill_files)} files")
     print("-" * 60)
 
-    issues_found = 0
+    issues = 0
 
     for filepath in skill_files:
         props, error = parse_frontmatter(filepath)
         relative = os.path.relpath(filepath, root_dir)
 
         if error:
-            print(f"❌ {relative}")
-            print(f"   └─ Error: {error}")
-            issues_found += 1
+            print(f"  x {relative}")
+            print(f"    error: {error}")
+            issues += 1
             continue
 
         missing = [p for p in required_props if p not in props]
-
         if missing:
-            print(f"⚠️  {relative}")
-            print(f"   └─ Faltan: {', '.join(missing)}")
-            issues_found += 1
+            print(f"  ! {relative}")
+            print(f"    missing: {', '.join(missing)}")
+            issues += 1
 
     print("-" * 60)
-    if issues_found == 0:
-        print(f"✅ Todos los {len(skill_files)} archivos tienen las propiedades requeridas.")
+    if issues == 0:
+        print(f"  + all {len(skill_files)} files OK")
+        return 0
     else:
-        ok = len(skill_files) - issues_found
-        print(f"📊 Resultado: {issues_found} con problemas / {ok} correctos / {len(skill_files)} total")
+        ok = len(skill_files) - issues
+        print(f"  {issues} issue(s)  /  {ok} OK  /  {len(skill_files)} total")
+        return 1
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Verifica propiedades de frontmatter en archivos SKILL.md"
+        description="Validate frontmatter properties in SKILL.md files"
     )
     parser.add_argument(
         "directory",
         nargs="?",
         default=".",
-        help="Directorio raíz donde buscar (por defecto: directorio actual)"
+        help="Root directory to scan (default: current directory)"
     )
     parser.add_argument(
         "--props",
         nargs="+",
         default=DEFAULT_REQUIRED,
         metavar="PROP",
-        help=f"Propiedades requeridas (por defecto: {' '.join(DEFAULT_REQUIRED)})"
+        help=f"Required properties (default: {' '.join(DEFAULT_REQUIRED)})"
     )
 
     args = parser.parse_args()
 
     if not os.path.isdir(args.directory):
-        print(f"❌ Error: '{args.directory}' no es un directorio válido.")
+        print(f"  x '{args.directory}' is not a valid directory")
         sys.exit(1)
 
-    check_skills(args.directory, args.props)
+    sys.exit(check_skills(args.directory, args.props))
 
 
 if __name__ == "__main__":
