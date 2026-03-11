@@ -10,6 +10,21 @@ Each skill is a folder with a `SKILL.md` that tells the agent how to approach a 
 
 ---
 
+## Benchmarks
+
+Same task, same project, same prompt — API documentation with two skills loaded.
+
+|                | Brain (MCP) | Raw markdown files |
+|----------------|-------------|--------------------|
+| Context tokens | 24,851      | 26,788             |
+| Cost           | $0.03       | $0.04              |
+| Lines added    | 876         | 693                |
+| Lines removed  | 161         | 90                 |
+
+Brain used **7% fewer tokens** while producing **26% more output**. The agent fetched only the sections it needed via progressive disclosure — it never loaded the full skill files.
+
+---
+
 ## How it works
 
 Skills live in `~/.brain/skills/`. Agents access them at runtime through an MCP server (`mcp.py`) using progressive disclosure — fetching only what they need, when they need it, without loading entire files into context.
@@ -301,14 +316,7 @@ All variable names must be prefixed with `BRAIN_`. The `.env.example` file is re
 Over 900 skills across categories including AI agents, frontend, backend, cloud, security, databases, testing, and more. Use the CLI or MCP server to browse:
 
 ```bash
-<<<<<<< Updated upstream
-spm list                    # all skills
-spm search "your topic"     # ranked search
-spm info <skill>            # details for one skill
-```
-=======
 brain list                    # all skills
 brain search "your topic"     # ranked search
 brain info <skill>            # details for one skill
 ```
->>>>>>> Stashed changes
