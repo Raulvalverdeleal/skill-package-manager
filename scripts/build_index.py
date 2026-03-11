@@ -22,6 +22,7 @@ import os
 import sys
 import json
 import time
+import datetime
 
 SPM_DIR = os.path.expanduser("~/.spm")
 SKILLS_DIR = os.path.join(SPM_DIR, "skills")
@@ -104,6 +105,7 @@ def build_index(skills_dir: str) -> dict:
 
         if fm is None:
             skipped += 1
+            print(f"[build_index] skipped (no SKILL.md): {skill_name}", file=sys.stderr)
             continue  # No SKILL.md at all
 
         file_tree = build_file_tree(skill_dir)
@@ -142,7 +144,7 @@ def main():
 
     output = {
         "_meta": {
-            "built_at":    __import__("datetime").datetime.utcnow().isoformat() + "Z",
+            "built_at":    datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "skill_count": len(index),
             "spm_dir":     SPM_DIR,
         },
