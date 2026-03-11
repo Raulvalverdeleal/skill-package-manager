@@ -315,29 +315,21 @@ async def skill_search(params: SearchInput) -> str:
     results = scored[start : start + PAGE_SIZE]
 
     if not results:
-        suggestion = "Try broader terms or check spm list --global for exact names."
-        return f'no results for "{params.query}"\n{suggestion}'
+        return f'no results for "{params.query}"'
 
-    lines = [
-        f'query: "{params.query}"  '
-        f'matches:{total}  page:{page}/{pages}',
-        "",
-    ]
+    lines = [f'{total} matches  page {page}/{pages}', ""]
     if page < pages:
-        lines.append(f"→ call skill_search(query='{params.query}', page={page+1}) for more")
+        lines.append(f"next: page={page+1}")
         lines.append("")
 
-    for score_val, skill_id, entry in results:
-        desc = entry.get("description", "no description")
+    for _, skill_id, entry in results:
+        desc = entry.get("description", "")
         if len(desc) > MAX_DESC:
             desc = desc[:MAX_DESC].rsplit(" ", 1)[0] + "…"
-        kws = entry.get("keywords", [])
-        kw_str = f"  [{', '.join(kws[:5])}]" if kws else ""
-        lines.append(f"■ {skill_id}  (score:{score_val}){kw_str}")
+        lines.append(skill_id)
         lines.append(f"  {desc}")
         lines.append("")
 
-    lines.append("→ call skill_info('<skill_id>') to inspect a candidate")
     return "\n".join(lines).rstrip()
 
 
