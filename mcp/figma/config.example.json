@@ -1,0 +1,22 @@
+{
+    "mcp": {
+        "figma": {
+            "enabled": false,
+            "type": "local",
+            "command": [
+                "uv",
+                "run",
+                "--with",
+                "mcp[cli]",
+                "--with",
+                "fastmcp",
+                "--with",
+                "python-dotenv",
+                "/Users/<your_username>/.spm/mcp/figma/mcp.py"
+            ],
+            "environment": {
+                "SPM_FIGMA_TOKEN": "XXXXX"
+            }
+        }
+    }
+}
