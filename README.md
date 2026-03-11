@@ -21,7 +21,7 @@ Same task, same project, same prompt — API documentation with two skills loade
 | Lines added    | 876         | 693                |
 | Lines removed  | 161         | 90                 |
 
-Brain used **7% fewer tokens** while producing **26% more output**. The agent fetched only the sections it needed via progressive disclosure — it never loaded the full skill files.
+Brain used **7-11% fewer tokens** while producing **26% more output**. The agent fetched only the sections it needed via progressive disclosure — it never loaded the full skill files.
 
 ---
 
