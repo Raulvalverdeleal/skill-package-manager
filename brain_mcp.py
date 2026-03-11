@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-mcp.py — BRAIN MCP Server
+brain_mcp.py — BRAIN MCP Server
 Progressive skill access: search → info → toc → section → full skill
 
-Place at ~/.brain/mcp.py and register in your MCP config.
+Place at ~/.brain/brain_mcp.py and register in your MCP config.
 Requires ~/.brain/index.json (run build_index.py first, or brain sync).
 """
 
@@ -40,7 +40,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-BRAIN_DIR    = os.path.expanduser("~/.brain")
+BRAIN_DIR  = os.path.expanduser("~/.brain")
 SKILLS_DIR = os.path.join(BRAIN_DIR, "skills")
 INDEX_PATH = os.path.join(BRAIN_DIR, "index.json")
 

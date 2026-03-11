@@ -67,7 +67,7 @@ Add to your MCP config (e.g. `opencode.json`):
   "mcp": {
     "brain": {
       "command": "python3",
-      "args": ["~/.brain/mcp.py"]
+      "args": ["~/.brain/brain_mcp.py"]
     }
   }
 }
