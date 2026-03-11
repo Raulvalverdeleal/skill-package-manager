@@ -1,6 +1,6 @@
 # Skill Package Manager
 
-A collection of ready-to-use skills for AI coding agents (Claude, Gemini, Cursor, Copilot, and others), with a built-in package manager to install and manage them per project.
+A collection of ready-to-use skills & mcp for AI coding agents (Claude, Gemini, Cursor, Copilot, and others), with a built-in package manager to install and manage them per project.
 
 Each skill is a folder with a `SKILL.md` that tells the agent how to approach a specific task — what tools to use, what patterns to follow, what to watch out for.
 
@@ -24,16 +24,16 @@ This is your local registry. All available skills live in `~/.spm/skills/`.
 
 `spm` is the CLI that copies skills into your projects. Since it's already in the cloned repo, just make it available globally — pick whichever approach you prefer:
 
-**Option A — symlink** (recommended):
-```bash
-ln -s ~/.spm/scripts/spm.py /usr/local/bin/spm
-chmod +x /usr/local/bin/spm
-```
-
-**Option B — shell alias**:
+**Option A — shell alias** (recommended):
 ```bash
 echo 'alias spm="python3 ~/.spm/scripts/spm.py"' >> ~/.zshrc
 source ~/.zshrc
+```
+
+**Option B — symlink**:
+```bash
+ln -s ~/.spm/scripts/spm.py /usr/local/bin/spm
+chmod +x /usr/local/bin/spm
 ```
 
 > **Note:** `spm` requires Python 3. No dependencies beyond the standard library.
