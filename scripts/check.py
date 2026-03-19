@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
 check.py — Validate frontmatter in SKILL.md files.
-
-Usage:
-    python3 check.py [directory] [--props prop1 prop2 ...]
-
-Examples:
-    python3 check.py ~/.brain/skills
-    python3 check.py ~/.brain/skills --props name description keywords
 """
 
 import os
@@ -15,7 +8,8 @@ import sys
 import argparse
 
 DEFAULT_REQUIRED = ["name", "description"]
-
+AGENTS_DIR = os.path.expanduser("~/.agents")
+SKILLS_DIR = os.path.join(AGENTS_DIR, "skills")
 
 def parse_frontmatter(filepath):
     """Extract frontmatter keys from a SKILL.md file."""
@@ -107,7 +101,7 @@ def main():
     parser.add_argument(
         "directory",
         nargs="?",
-        default=".",
+        default=SKILLS_DIR,
         help="Root directory to scan (default: current directory)"
     )
     parser.add_argument(

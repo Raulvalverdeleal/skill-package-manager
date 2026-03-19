@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
 """
 build_index.py — Pre-build ~/.brain/index.json from all skill frontmatters.
-Run via: python3 build_index.py
-Called automatically by `brain sync` after git pull.
-
-Output shape per skill:
-{
-  "skill-name": {
-    "name": "skill-name",
-    "description": "...",
-    "keywords": ["react", "ui"],        # from frontmatter if present
-    "dependencies": ["other-skill"],    # from frontmatter if present
-    "file_tree": ["SKILL.md", "references/patterns.md"],
-    "has_references": true,
-    "has_scripts": false
-  }
-}
 """
 
 import os
@@ -25,9 +10,9 @@ import time
 import datetime
 
 BRAIN_DIR = os.path.expanduser("~/.brain")
-SKILLS_DIR = os.path.join(BRAIN_DIR, "skills")
+AGENTS_DIR = os.path.expanduser("~/.agents")
+SKILLS_DIR = os.path.join(AGENTS_DIR, "skills")
 INDEX_PATH = os.path.join(BRAIN_DIR, "index.json")
-
 
 # ── Frontmatter parser ────────────────────────────────────────────────────────
 
