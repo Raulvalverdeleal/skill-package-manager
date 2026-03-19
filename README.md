@@ -33,13 +33,12 @@ Skills live in `~/.agents/skills/` but **agents must never access this directory
 
 **Security note:** You should deny agent access to `~/.agents/skills` and disable any direct skill-loading tools. Skills must always be accessed via the MCP server to maintain token efficiency.
 
-The CLI (`brain`) and helper script (`skills.sh`) handle skill management: syncing from remote, searching, and organizing skills.
+The CLI (`brain`) handles registry management: syncing from remote, searching, and organizing skills.
 
 ```
 ~/.brain/
 ├── brain_mcp.py         ← MCP server (agent access layer)
 ├── brain_cli.py         ← CLI tool for registry management
-├── skills.sh            ← Helper script for skill operations
 ├── index.json           ← pre-built frontmatter index
 └── scripts/
     └── build_index.py   ← called by brain sync to regenerate index.json
@@ -124,15 +123,6 @@ brain sync                       Pull registry and rebuild index if changed
 brain search <query> [--page N]  Search skills  (prefix terms with - to exclude)
 brain info   <skill>             Show metadata and file tree for a skill
 brain list                       List all skills in the registry
-```
-
-You can also use `skills.sh` for quick skill management:
-
-```bash
-skills.sh sync                   # Same as 'brain sync'
-skills.sh search <query>         # Same as 'brain search'
-skills.sh info <skill>           # Same as 'brain info'
-skills.sh list                   # Same as 'brain list'
 ```
 
 **Examples:**
