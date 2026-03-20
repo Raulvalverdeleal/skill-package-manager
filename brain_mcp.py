@@ -3,7 +3,7 @@
 brain_mcp.py — BRAIN MCP Server
 Progressive skill access: search → info → toc → section → full skill
 Place at ~/.brain/brain_mcp.py and register in your MCP config.
-Requires ~/.brain/index.json (run build_index.py first, or brain sync).
+Requires ~/.brain/index.json (auto-built on first run if missing).
 """
 
 import subprocess
@@ -11,7 +11,7 @@ import sys
 
 
 def _ensure_deps():
-    required = ["mcp[cli]"]
+    required = ["mcp[cli]", "watchdog"]
     missing = []
     for pkg in required:
         import_name = pkg.split("[")[0].replace("-", "_")
@@ -33,9 +33,12 @@ import os
 import re
 import json
 import time
+import threading
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, ConfigDict
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -53,17 +56,21 @@ _INDEX: dict = {}        # skill_id → entry
 _INDEX_META: dict = {}   # _meta block
 _INDEX_LOADED_AT: float = 0.0
 
-def _build_index() -> None:
+
+def _build_index() -> bool:
+    """Run build_index.py to regenerate index.json. Returns True on success."""
     build_script = os.path.join(BRAIN_DIR, "scripts", "build_index.py")
     if not os.path.isfile(build_script):
         print(f"[brain_mcp] build_index.py not found at {build_script}", file=sys.stderr)
-        return
+        return False
     try:
         print(f"[brain_mcp] running build_index.py...", file=sys.stderr)
         subprocess.check_call([sys.executable, build_script])
         print(f"[brain_mcp] index built successfully", file=sys.stderr)
+        return True
     except subprocess.CalledProcessError as e:
         print(f"[brain_mcp] build_index.py failed: {e}", file=sys.stderr)
+        return False
 
 
 def _load_index(force: bool = False) -> None:
@@ -72,7 +79,10 @@ def _load_index(force: bool = False) -> None:
         return
     if not os.path.isfile(INDEX_PATH):
         print(f"[brain_mcp] index.json not found — building now...", file=sys.stderr)
-        _build_index()
+        if not _build_index():
+            _INDEX = {}
+            _INDEX_META = {"error": f"index.json not found and build failed — run build_index.py manually"}
+            return
     try:
         with open(INDEX_PATH, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -90,6 +100,84 @@ def _skill_dir(skill_id: str) -> str:
 
 def _skill_md(skill_id: str) -> str:
     return os.path.join(_skill_dir(skill_id), "SKILL.md")
+
+
+# ── Skills directory watcher ──────────────────────────────────────────────────
+
+# Debounce: avoid rebuilding multiple times for rapid filesystem events
+# (e.g. a skill installer writing several files at once)
+_REBUILD_DEBOUNCE_SECONDS = 3.0
+_rebuild_timer: Optional[threading.Timer] = None
+_rebuild_lock = threading.Lock()
+
+# Track known top-level skill folders so we only react to *new* ones
+_known_skill_dirs: set[str] = set()
+
+
+def _get_current_skill_dirs() -> set[str]:
+    """Return the set of immediate subdirectory names inside SKILLS_DIR."""
+    try:
+        return {
+            entry.name
+            for entry in os.scandir(SKILLS_DIR)
+            if entry.is_dir()
+        }
+    except FileNotFoundError:
+        return set()
+
+
+def _schedule_rebuild() -> None:
+    """Debounced rebuild: resets the timer on every call, fires once things settle."""
+    global _rebuild_timer
+    with _rebuild_lock:
+        if _rebuild_timer is not None:
+            _rebuild_timer.cancel()
+        _rebuild_timer = threading.Timer(_REBUILD_DEBOUNCE_SECONDS, _do_rebuild)
+        _rebuild_timer.daemon = True
+        _rebuild_timer.start()
+
+
+def _do_rebuild() -> None:
+    """Actually rebuild the index and hot-reload it into memory."""
+    global _known_skill_dirs
+    print("[brain_mcp] new skill detected — rebuilding index...", file=sys.stderr)
+    if _build_index():
+        _load_index(force=True)
+        _known_skill_dirs = _get_current_skill_dirs()
+        print(f"[brain_mcp] index hot-reloaded — {len(_INDEX)} skills", file=sys.stderr)
+
+
+class _SkillDirHandler(FileSystemEventHandler):
+    """Watch SKILLS_DIR for new top-level subdirectories only."""
+
+    def on_created(self, event):
+        if not event.is_directory:
+            return
+        # Only care about direct children of SKILLS_DIR, not nested paths
+        parent = os.path.dirname(os.path.normpath(event.src_path))
+        if os.path.normpath(parent) != os.path.normpath(SKILLS_DIR):
+            return
+        skill_name = os.path.basename(event.src_path)
+        if skill_name not in _known_skill_dirs:
+            print(f"[brain_mcp] new skill folder: {skill_name}", file=sys.stderr)
+            _schedule_rebuild()
+
+
+def _start_watcher() -> None:
+    """Start the watchdog observer in a background daemon thread."""
+    global _known_skill_dirs
+    if not os.path.isdir(SKILLS_DIR):
+        print(f"[brain_mcp] SKILLS_DIR not found ({SKILLS_DIR}) — watcher not started", file=sys.stderr)
+        return
+
+    _known_skill_dirs = _get_current_skill_dirs()
+
+    observer = Observer()
+    # watch_recursive=False: only events directly inside SKILLS_DIR
+    observer.schedule(_SkillDirHandler(), path=SKILLS_DIR, recursive=False)
+    observer.daemon = True
+    observer.start()
+    print(f"[brain_mcp] watching {SKILLS_DIR} for new skills", file=sys.stderr)
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
@@ -597,7 +685,7 @@ async def skill_index_status(params: IndexStatusInput) -> str:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Eagerly load index on startup so first tool call is fast
+    # Eagerly load index on startup (auto-builds if missing)
     _load_index()
     count = len(_INDEX)
     err   = _INDEX_META.get("error")
@@ -605,4 +693,8 @@ if __name__ == "__main__":
         print(f"[brain_mcp] warning: {err}", file=sys.stderr)
     else:
         print(f"[brain_mcp] index loaded — {count} skills", file=sys.stderr)
+
+    # Start filesystem watcher for new skill folders
+    _start_watcher()
+
     mcp.run()
