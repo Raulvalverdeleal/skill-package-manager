@@ -53,15 +53,26 @@ _INDEX: dict = {}        # skill_id → entry
 _INDEX_META: dict = {}   # _meta block
 _INDEX_LOADED_AT: float = 0.0
 
+def _build_index() -> None:
+    build_script = os.path.join(BRAIN_DIR, "scripts", "build_index.py")
+    if not os.path.isfile(build_script):
+        print(f"[brain_mcp] build_index.py not found at {build_script}", file=sys.stderr)
+        return
+    try:
+        print(f"[brain_mcp] running build_index.py...", file=sys.stderr)
+        subprocess.check_call([sys.executable, build_script])
+        print(f"[brain_mcp] index built successfully", file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"[brain_mcp] build_index.py failed: {e}", file=sys.stderr)
+
 
 def _load_index(force: bool = False) -> None:
     global _INDEX, _INDEX_META, _INDEX_LOADED_AT
     if _INDEX and not force:
         return
     if not os.path.isfile(INDEX_PATH):
-        _INDEX = {}
-        _INDEX_META = {"error": f"index.json not found at {INDEX_PATH} — run build_index.py"}
-        return
+        print(f"[brain_mcp] index.json not found — building now...", file=sys.stderr)
+        _build_index()
     try:
         with open(INDEX_PATH, "r", encoding="utf-8") as f:
             raw = json.load(f)
